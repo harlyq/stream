@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script>
+      (function() {
+        function stream(f) {
+          this.f = f
+          this.children = []
+        }
+        
+        stream.prototype.pipe = function(f) {
+          // chained pipe() will be children of children
+          var s = new stream(f)
+          this.children.push(s)
+          return s
+        }
+        
+        stream.prototype.reset = function() {}
+        
+        stream.prototype.push = function(x) {
+          var y = (typeof this.f === 'function') ? this.f.call(null, x) : x
+            
+          // each child receives the same data
+          if (typeof y !== 'undefined') {
+            for (var i = 0; i < this.children.length; ++i) {
+              this.children[i].push(y)
+            }
+          }
+        }
+        
+        stream.prototype.map = function(f) {
+          return this.pipe((x) => { 
+            return f.call(null, x) 
+          })
+        }
+        
+        stream.prototype.filter = function(f) {
+          return this.pipe((x) => { 
+            if (f.call(null, x)) {
+              return x 
+            }
+          })
+        }
+
+        // f(f0, x) the first parameter is the state, the second is the new value
+        stream.prototype.fold = function(f, f0) {
+          return this.pipe((x) => { 
+            var f1 = f.call(null, f0, x)
+            if (typeof f1 !== 'undefined') {
+              f0 = f1 // replace the old starting value
+              return f1
+            }
+          })
+        }
+
+        stream.prototype.log = function() {
+          return this.pipe((x) => {
+            console.log(x)
+          })
+        }
+        
+        function eventStream(element, name) {
+          var s = new stream()
+          var handler = function(e) {
+            s.push(e)
+          }          
+          s.reset = function() {
+            element.removeEventListener(name, handler)
+          }
+          
+          element.addEventListener(name, handler)
+          return s
+        }
+        
+        function intervalStream(periodms) {
+          var s = new stream()
+          var count = 0          
+          var id = setInterval(() => { s.push(++count) }, periodms)
+          
+          s.reset = function() {
+            clearTimeout(id)
+          }
+          return s
+        }
+        
+        // each argument is a stream to merge
+        function mergeStreams() {          
+          var numStreams = arguments.length
+          var buffer = []
+          var s = new stream()
+          var addPipe = function(child, index) {
+            child.pipe((x) => {
+              buffer[index] = x // remember stream's value
+              
+              var numReady = 0
+              for (var k = 0; k < numStreams; ++k) {
+                if (typeof buffer[k] !== "undefined") {
+                  numReady++
+                }
+              }
+              if (numReady == numStreams) {
+                var result = buffer.slice()
+                buffer.length = 0
+                s.push(result) // start merged stream
+              }
+              
+              return x // continue individual streams
+            })
+          }
+          
+          for (var i = 0; i < numStreams; ++i) {
+            addPipe(arguments[i], i)
+          }
+
+          return s
+        }
+        
+        window.addEventListener('load', function() {
+          var s = new eventStream(document.querySelector('#button'), 'click')
+          var t = new intervalStream(5000)
+          // var a = s.map((x) => {return 1;})
+          // var b = s.log()
+          // var c = a.log()
+          var d = s.fold((count, x) => {return ++count;}, 0).log()
+          // var e = t.log()
+          var f = new mergeStreams(s, t).log()
+        })
+      })()
+    </script>
+  </head>
+  <body>
+    <button id="button">Click</button>
+  </body>
+</html>
+  
