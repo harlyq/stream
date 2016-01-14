@@ -59,11 +59,19 @@
           })
         }
         
-        function eventStream(element, name) {
+        stream.prototype.split = function(i) {
+          return this.pipe((x) => {
+            return x[i]
+          })
+        }
+        
+        function eventStream(selector, name) {
           var s = new stream()
           var handler = function(e) {
             s.push(e)
           }          
+          var element = document.querySelector(selector)
+          
           s.reset = function() {
             element.removeEventListener(name, handler)
           }
@@ -115,8 +123,31 @@
           return s
         }
         
+        var canvas = function(selector) {
+          this.can = document.querySelector(selector)
+          this.ctx = this.can.getContext('2d')
+          return this
+        }
+        
+        canvas.prototype.image = function(src, dx, dy) {
+            var self = this
+            if (!this.img) {
+              this.img = new Image()
+            }
+            this.img.src = src
+            this.img.onload = function() {
+              self.ctx.drawImage(self.img, dx, dy)
+            }
+            return this
+        }
+        
+        canvas.prototype.clear = function() {
+          this.ctx.clearRect(0, 0, this.can.width, this.can.height)
+          return this
+        }
+        
         window.addEventListener('load', function() {
-          var s = new eventStream(document.querySelector('#button'), 'click')
+          var s = new eventStream('#button', 'click')
           var t = new intervalStream(5000)
           // var a = s.map((x) => {return 1;})
           // var b = s.log()
@@ -124,12 +155,29 @@
           var d = s.fold((count, x) => {return ++count;}, 0).log()
           // var e = t.log()
           var f = new mergeStreams(s, t).log()
+
+          var update = function(data, newpoint) {
+            data.x = newpoint.x
+            data.y = newpoint.y
+            return data
+          }
+          
+          var page = new canvas("#canvas")
+          var draw = function(point) {
+            page.clear().image("mario.png", point.x, point.y)
+          }
+          
+          // todo offset x and y by element position
+          var click = new eventStream('#canvas', 'mousemove')
+          click.map((evt) => { return {x: evt.x, y: evt.y}}).fold(update, {x:0, y:0}).pipe(draw)
         })
       })()
     </script>
   </head>
   <body>
     <button id="button">Click</button>
+    <div></div>
+    <canvas id="canvas" width="400" height="400"></canvas>
   </body>
 </html>
   
