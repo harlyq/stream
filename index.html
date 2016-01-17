@@ -193,6 +193,65 @@
           
           var x = new eventStream('button','click')
           x.map((e) => 'clicked ' + e.target.id).log()
+          
+          // mutating r, should we make a copy?
+          // yes, so then we should use an object paradigm for mutations e.g. rect.move()?
+          // no because we want to have generic functions so we 'move' anything with an x and a y
+          // not just 'rect'
+          // mutation is cheap and copy is expensive, we could use record structures which
+          // remember their mutations (zippers?), but this makes access and update more expensive
+          var rect = function(w, h) { return {type:'rect', x:0, y:0, w:w, h:h, fill:'none', line:'black'} }
+          var move = function(r, x, y) { r.x += x; r.y += y; return r }
+          var fill = function(r, col) { r.fill = col; return r }
+          var clear = function(col) { return {type:'clear', fill:col} }
+          var copy = function(obj) { 
+            var n = {}
+            for (var attr in obj) {
+              if (obj.hasOwnProperty(attr))
+                n[attr] = obj[attr]
+            }
+              
+            return n            
+          }
+          var collage = function(w, h, shapes) {
+            var canvas = document.createElement('canvas')
+            var ctx = canvas.getContext('2d')
+            canvas.width = w
+            canvas.height = h
+            
+            for (var i = 0; i < shapes.length; ++i) {
+              var shape = shapes[i]
+              switch (shape.type) {
+                case 'clear':
+                  ctx.fillStyle = shape.fill
+                  ctx.fillRect(0, 0, w, h)
+                  break;
+                  
+                case 'rect':
+                  if (shape.fill !== 'none') {
+                    ctx.fillStyle = shape.fill
+                    ctx.fillRect(shape.x, shape.y, shape.w, shape.h)
+                  }
+                  if (shape.line !== 'none') {
+                    ctx.strokeStyle = shape.line
+                    ctx.strokeRect(shape.x, shape.y, shape.w, shape.h)
+                  }
+                  break
+              }
+            }
+            return canvas
+          }
+          
+          function rect1(w, h) {
+            r = rect(w, h)
+            r = move(r, 10, 10)
+            f = fill(r, "green")
+            return r
+          }
+          var myCollage = collage(50, 50, [clear('lightgray'), rect1(30, 20)])
+          var canvas2 = document.querySelector('#canvas2')
+          var ctx2 = canvas2.getContext('2d')
+          ctx2.drawImage(myCollage, 0, 0)
         })
       })()
     </script>
@@ -203,6 +262,7 @@
     <button id="button3">Click 3</button>
     <div></div>
     <canvas id="canvas" width="400" height="400"></canvas>
+    <canvas id="canvas2" width="400" height="400"></canvas>
   </body>
 </html>
   
