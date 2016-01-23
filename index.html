@@ -246,7 +246,7 @@
           // var e = t.log()
           var f = new mergeStreams("all", s, t).log()
 
-          var update = function(data, newpoint) {
+          var update2 = function(data, newpoint) {
             data.x = newpoint.x
             data.y = newpoint.y
             return data
@@ -254,12 +254,12 @@
           
           var page = new canvas("#canvas")
           var draw = function(point) {
-            page.clear().image("mario.png", point.x, point.y).render()
+            page.clear().image("images/mario.png", point.x, point.y).render()
           }
           
           // todo offset x and y by element position
           var click = new eventStream('#canvas', 'mousemove')
-          click.map((evt) => { return {x: evt.x, y: evt.y}}).fold(update, {x:0, y:0}).pipe(draw)
+          click.map((evt) => { return {x: evt.x, y: evt.y}}).fold(update2, {x:0, y:0}).pipe(draw)
           
           var x = new eventStream('button','click')
           x.map((e) => 'clicked ' + e.target.id).log()
@@ -276,24 +276,12 @@
           var clear = function(col) { return {type:'clear', fill:col} }
           var image = function(src, x, y) { return {type:'image', x:x, y:y, src:src} }
 
-          var collage = function(w, h, shapes, canvas) {
-            canvas = canvas || document.createElement('canvas')
-            
-            var s = new stream()
-            var pendingActions = 0
+          var collage2 = function(w, h, shapes) {
+            var canvas = document.createElement('canvas')
             var ctx = canvas.getContext('2d')
             canvas.width = w
             canvas.height = h
-            
-            var redrawAfterLoad = function() {
-                --pendingActions;
-                if (pendingActions === 0) {
-                  var canvas = document.createElement('canvas')
-                  collage(w, h, shapes, canvas)
-                  s.push(canvas)
-                }
-            }
-            
+
             for (var i = 0; i < shapes.length; ++i) {
               var shape = shapes[i]
               switch (shape.type) {
@@ -315,6 +303,30 @@
                   
                 case 'image':
                   var img = new Image()
+                  img.src = shape.src  // may not be loaded
+                  ctx.drawImage(img, shape.x, shape.y)
+              }
+            }
+
+            return canvas
+          }
+          
+          var collage = function(w, h, shapes) {
+            var s = new stream()
+            var pendingActions = 0
+            
+            var redrawAfterLoad = function() {
+                --pendingActions;
+                if (pendingActions === 0) {                  
+                  s.push(collage2(w, h, shapes))
+                }
+            }
+            
+            for (var i = 0; i < shapes.length; ++i) {
+              var shape = shapes[i]
+              switch (shape.type) {
+                case 'image':
+                  var img = new Image()
                   img.src = shape.src  // may have to load image
                   if (!img.complete) {
                     pendingActions++
@@ -324,7 +336,11 @@
                   }
               }
             }
-                                   
+
+            if (pendingActions === 0) {
+              setTimeout(redrawAfterLoad, 0)
+            }
+            
             return s
           }
           
@@ -345,10 +361,66 @@
             }
           }
           
-          var myCollage = collage(250, 250, [clear('lightgray'), image('mario.png', 10, 10), rect1(30, 20)])
+          var myCollage = collage(250, 250, [clear('lightgray'), image('images/mario.png', 10, 10), rect1(30, 20)])
           myCollage.pipe(drawCanvas('#canvas2'))
           
-          keyArrowStream().log()
+          //keyArrowStream().log()
+          
+          var model0 = {x:0, y:0, vx: 0, vy:0, dir:"right"}
+          
+          function update(model, dt, keys) {
+            model = gravity(model, dt)
+            model = jump(model, keys)
+            model = walk(model, keys)
+            model = physics(model, dt)
+            return model
+          }
+          function gravity(model, dt) {
+            model.vy = (model.y > 0 ? model.vy - dt/4 : 0)
+            return model
+          }
+          function jump(model, keys) {
+            if (keys.y > 0 && model.vy === 0)
+              model.vy = 6.0
+            return model
+          }
+          function physics(model, dt) {
+            model.x = model.x + dt*model.vx
+            model.y = Math.max(0, model.y + dt*model.vy)
+            return model
+          }
+          function walk(model, keys) {
+            model.vx = keys.x
+            if (keys.x < 0)
+              model.dir = "left"
+            else if (keys.x > 0)
+              model.dir = "right"
+            return model
+          }
+          function viewStream(model, w, h) {
+            var verb = "stand"
+            if (model.y > 0)
+              verb = "jump"
+            else if (model.vx != 0)
+              verb = "walk"
+            var src = "images/mario_" + verb + "_" + model.dir + ".gif"
+            var marioImage = image(src, 35, 35)
+            var groundY = 62 - h/20
+
+            return collage2(w, h, [
+              fill(rect(w, h), 'lightblue'),
+              move(fill(rect(w, 50), 'green'), 0, 24 - h/2),
+              move(marioImage, model.x, model.y + groundY)
+            ])
+          }
+          
+          var input = keyArrowStream().fold(
+            (model, keys) => update(model, 1/20, keys), model0
+          ).map(
+            (model) => viewStream(model, 200, 200)
+          ).map(
+            drawCanvas("#canvas3")
+          )
         })
       })()
     </script>
@@ -357,9 +429,11 @@
     <button id="button1">Click 1</button>
     <button id="button2">Click 2</button>
     <button id="button3">Click 3</button>
-    <div></div>
-    <canvas id="canvas" width="400" height="400"></canvas>
-    <canvas id="canvas2" width="400" height="400"></canvas>
+    <div/>
+    <canvas id="canvas" width="400" height="300"></canvas>
+    <canvas id="canvas2" width="400" height="300"></canvas>
+    <div/>
+    <canvas id="canvas3" width="400" height="300"></canvas>
   </body>
 </html>
   
