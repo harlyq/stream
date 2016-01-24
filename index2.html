@@ -4,7 +4,6 @@
     <script src="stream.js" type="text/javascript"></script>
     <script>
       window.addEventListener("load", function() {
-        return
         
         function extend(a, b) {
             if (a !== undefined && typeof a !== typeof b)
@@ -43,29 +42,131 @@
         function rect(x, y, w, h) { return extend(shape(x, y), {type:'rect', w:w, h:h}) }
         function image(src, x, y) { return extend(shape(x, y), {type:'image', src:src}) }
 
-        function html(base, shapes) {
-          var elm = document.querySelector(base)
-
-          var innerHTML = ''
+        var htmlCache = {}
+        function html(selector, shapes) {
+          var root = htmlCache[selector]
+          if (root === undefined) {
+            root = {}
+            root.elem = document.querySelector(selector)
+            root.html = ''
+            root.children = []
+            root.elem.innerHTML = ''
+          }
+          
+          var cache = root
           for (var i = 0; i < shapes.length; ++i) {
             var shape = shapes[i]
+            var child = cache.children[i]
+            
+            if (child === undefined) {
+              child = {}
+              cache.children.push(child)
+            }
+            var elem = child.elem
+            
             switch (shape.type) {
               case 'rect':
-                innerHTML += `<div class="rect" style="left:${shape.x}px; top:${shape.y}px; width:${shape.w}px; height:${shape.h}px; background-color:${shape.fill}; outline:1px solid ${shape.stroke}"></div>\n`
+                if (elem === undefined) {
+                  elem = document.createElement('div')
+                  child.elem = elem
+                  cache.elem.appendChild(elem)
+                }
+                if (elem.className != 'rect') {
+                  elem.className = 'rect'
+                }
+                var html = `left:${shape.x}px; top:${shape.y}px; width:${shape.w}px; height:${shape.h}px; background-color:${shape.fill}; outline:1px solid ${shape.stroke}`
+                if (html != elem.html) {
+                  elem.setAttribute('style', html)
+                  elem.html = html
+                }
                 break
                 
               case 'image':
-                innerHTML += `<img src=${shape.src} class="rect" style="left:${shape.x}px; top:${shape.y}px;">\n`
+                if (elem === undefined) {
+                  elem = document.createElement('img')
+                  child.elem = elem
+                  cache.elem.appendChild(elem)
+                }
+                if (elem.className != 'rect') {
+                  elem.className = 'rect'
+                }
+                var src = `${shape.src}`
+                if (src != child.src) {
+                  elem.src = src
+                  child.src = src
+                }
+                var html = `left:${shape.x}px; top:${shape.y}px;`
+                if (html != child.html) {
+                  elem.setAttribute('style', html)
+                  child.html = html
+                }
                 break
             }
-          }
-          
-          elm.innerHTML = innerHTML
         }
 
-        var rect1 = stroke(fill(rect(10, 30, 20, 20), 'lightblue'), 'black')
-        var image1 = image('images/mario_walk_left.gif', 50, 50)
-        html('body', [rect1, image1])
+          htmlCache[selector] = root
+        }
+
+        // var rect1 = stroke(fill(rect(10, 30, 20, 20), 'lightblue'), 'black')
+        // var image1 = image('images/mario_walk_left.gif', 50, 50)
+        // html('body', [rect1, image1])
+
+        var model0 = {x:0, y:0, vx: 0, vy:0, dir:"right"}
+        
+        function update(model, dt, keys) {          
+          model = gravity(model, dt)
+          model = jump(model, keys)
+          model = walk(model, keys)
+          model = physics(model, dt)
+          return model
+        }
+        function gravity(model, dt) {
+          model.vy = (model.y > 0 ? model.vy - dt/4 : 0)
+          return model
+        }
+        function jump(model, keys) {
+          if (keys.y > 0 && model.y <= 0)
+            model.vy = 6.0
+          return model
+        }
+        function physics(model, dt) {
+          model.x = model.x + dt*model.vx
+          model.y = Math.max(0, model.y + dt*model.vy)
+          return model
+        }
+        function walk(model, keys) {
+          model.vx = keys.x
+          if (keys.x < 0)
+            model.dir = "left"
+          else if (keys.x > 0)
+            model.dir = "right"
+          return model
+        }
+        function view(model, w, h) {
+          var verb = "stand"
+          if (model.y > 0)
+            verb = "jump"
+          else if (model.vx != 0)
+            verb = "walk"
+          var src = "images/mario_" + verb + "_" + model.dir + ".gif"
+          var marioImage = image(src, 35, 35)
+          var groundY = h - 50 - 35
+
+          var result = html('body', [
+            fill(rect(0, 0, w, h), 'lightblue'),
+            fill(rect(0, h - 50, w, 50), 'green'),
+            move(marioImage, model.x, groundY - model.y)
+          ])
+
+          return result
+        }
+        
+        var dt = 50
+        var input = keyArrowStream().sampleAt(dt).fold(
+          (model, keys) => update(model, 1.5, keys), model0
+        ).map(
+          (model) => view(model, 200, 200)
+        )
       })
     </script>
     <style>
@@ -76,8 +177,8 @@
     </style>
   </head>
   <body>
-    <div style="transform:rotate(-90deg)">
+    <!--div style="transform:rotate(-90deg)">
       <img src="images/mario_walk_left.gif" style="position:absolute;left:140px">
-    </div>
+    </div-->
   </body>
 </html>

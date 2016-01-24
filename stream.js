@@ -14,7 +14,11 @@
   stream.prototype.reset = function() {}
   
   stream.prototype.push = function(x) {
-    var y = (typeof this.f === 'function') ? this.f.call(null, x) : x
+    var y
+    if (typeof this.f === 'function')
+      y = this.f.call(null, x)
+    else
+      y = x
       
     // each child receives the same data
     if (typeof y !== 'undefined') {
@@ -61,6 +65,23 @@
     })
   }
   
+  stream.prototype.sampleAt = function(t) {
+    var lastValue
+    var self = this.pipe(function(x) {
+      lastValue = x
+    })
+    
+    window.setInterval(function() {
+      if (lastValue !== undefined) {
+        for (var i = 0; i < self.children.length; ++i) {
+          self.children[i].push(lastValue)
+        }
+      }
+    }, t)
+    
+    return self
+  }
+  
   function eventStream(selector, name) {
     var s = new stream()
     var handler = function(e) {
@@ -95,7 +116,20 @@
     
     var s = new stream()
     var elements = document.querySelectorAll(selector)
-    var state = {x:0, y:0}
+    var state = {}
+
+    var pushArrows = function() {
+      var arrows = {x:0, y:0}
+      for (key in state) {
+        switch (key) {
+          case "ArrowDown": arrows.y -= 1; break;
+          case "ArrowUp": arrows.y += 1; break;
+          case "ArrowLeft": arrows.x -= 1; break;
+          case "ArrowRight": arrows.x += 1; break;
+        }
+      }
+      s.push(arrows)
+    }
     
     var downHandler = function(e) {
       var send = false
@@ -104,13 +138,15 @@
         key = "Arrow" + e.keyIdentifier
       
       switch (key) {
-        case "ArrowDown": state.y = -1; send = true; break;
-        case "ArrowUp": state.y = 1; send = true; break;
-        case "ArrowLeft": state.x = -1; send = true; break;
-        case "ArrowRight": state.x = 1; send = true; break;
+        case "ArrowDown":
+        case "ArrowUp":
+        case "ArrowLeft":
+        case "ArrowRight":
+          state[key] = true
+          send = true
       }
       if (send)
-        s.push(state)
+        pushArrows()
     }
     
     var upHandler = function(e) {
@@ -118,16 +154,17 @@
       if (key === undefined)
         key = "Arrow" + e.keyIdentifier
 
+      var send = false
       switch (key) {
         case "ArrowDown": 
         case "ArrowUp":
-          state.y = 0
-          break
         case "ArrowLeft": 
         case "ArrowRight": 
-          state.x = 0
-          break
+          delete state[key]
+          send = true
       }
+      if (send)
+        pushArrows()
     }
     
     for (var i = 0; i < elements.length; ++i) {
